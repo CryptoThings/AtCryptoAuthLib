@@ -616,7 +616,7 @@ ATCA_STATUS atInitExecTimes(ATCACommand cacmd, ATCADeviceType device_type)
 
 uint16_t atGetExecTime( ATCACommand cacmd, ATCA_CmdMap cmd )
 {
-	return (2*cacmd->execution_times[cmd]);
+	return (cacmd->execution_times[cmd]);
 }
 
 
