@@ -77,6 +77,7 @@ static char g_printf_buf[90];
   { \
     snprintf(g_printf_buf, 90, __VA_ARGS__); \
     Serial.print(g_printf_buf); \
+    Serial.flush(); \
   }
 
 #else
@@ -107,6 +108,7 @@ AtCryptoAuthLib::~AtCryptoAuthLib()
 
 ATCA_STATUS AtCryptoAuthLib::init(const uint8_t *access_key)
 {
+  bool lockstate;
   ATCA_STATUS ret;
   ret = atcatls_init(gCfg);
   if (ret != ATCA_SUCCESS)
@@ -118,6 +120,10 @@ ATCA_STATUS AtCryptoAuthLib::init(const uint8_t *access_key)
     set_enc_key(access_key);
   }
 
+  ret = config_locked(lockstate);
+  if ((ret != ATCA_SUCCESS) || !lockstate)
+    return ret;
+
   return atca_tls_init_enc_key();
 }
 
@@ -128,22 +134,100 @@ ATCA_STATUS AtCryptoAuthLib::random(uint8_t rand_out[32])
 
 ATCA_STATUS AtCryptoAuthLib::get_pub_key(SlotCfg slot, uint8_t pubKey[64])
 {
-  return atcab_get_pubkey((uint16_t)slot, pubKey);
+  switch (slot) {
+    case AUTH_PRIV:
+    case AUTH_PRIV_2:
+    case ECDHE_PRIV:
+    case ECC_KEY_1:
+    case ECC_KEY_2:
+    case ECC_KEY_3:
+      return atcab_get_pubkey((uint16_t)slot, pubKey);
+    case SIGNER_PUBKEY:
+    case SIGNER_CERT:
+    case FEATURE_CERT:
+    case PKICA_PUBKEY:
+    case AUTH_CERT_DATA:
+      return atcab_read_pubkey((uint16_t)slot, pubKey);
+    default:
+      break;
+  }
+
+  return ATCA_BAD_PARAM;
 }
 
 ATCA_STATUS AtCryptoAuthLib::gen_key(SlotCfg slot, uint8_t pubKey[64])
 {
-  return atcab_genkey((uint16_t)slot, pubKey);
+  switch (slot) {
+    case AUTH_PRIV:
+    case AUTH_PRIV_2:
+    case ECDHE_PRIV:
+    case ECC_KEY_1:
+    case ECC_KEY_2:
+    case ECC_KEY_3:
+      return atcab_genkey((uint16_t)slot, pubKey);
+    default:
+      break;
+  }
+
+  return ATCA_BAD_PARAM;
+}
+
+ATCA_STATUS AtCryptoAuthLib::priv_key_write(SlotCfg slot, const uint8_t priv_key[32])
+{
+  int i;
+  uint8_t pad_key[36];
+
+  switch (slot) {
+    case ECC_KEY_1:
+    case ECC_KEY_2:
+    case ECC_KEY_3:
+      break;
+    default:
+      return ATCA_BAD_PARAM;
+  }
+
+  for (i = 0; i < 32; i++) {
+    pad_key[i+4] = priv_key[i];
+  }
+  pad_key[0] = 0;
+  pad_key[1] = 0;
+  pad_key[2] = 0;
+  pad_key[3] = 0;
+
+  return atcab_priv_write(slot, pad_key, ENC_PARENT, m_enc_key);
 }
 
 ATCA_STATUS AtCryptoAuthLib::write_pub_key(SlotCfg slot, const uint8_t pubKey[64])
 {
-    return atcab_write_pubkey((uint16_t)slot, pubKey);
+  switch (slot) {
+    case SIGNER_PUBKEY:
+    case SIGNER_CERT:
+    case FEATURE_CERT:
+    case PKICA_PUBKEY:
+    case AUTH_CERT_DATA:
+      return atcab_write_pubkey((uint16_t)slot, pubKey);
+    default:
+      break;
+  }
+
+  return ATCA_BAD_PARAM;
 }
 
 ATCA_STATUS AtCryptoAuthLib::sign(SlotCfg slot, const uint8_t to_sign[32], uint8_t signature[64])
 {
-  return atcab_sign((uint16_t)slot, to_sign, signature);
+  switch (slot) {
+    case AUTH_PRIV:
+    case AUTH_PRIV_2:
+    case ECDHE_PRIV:
+    case ECC_KEY_1:
+    case ECC_KEY_2:
+    case ECC_KEY_3:
+      return atcab_sign((uint16_t)slot, to_sign, signature);
+    default:
+      break;
+  }
+
+  return ATCA_BAD_PARAM;
 }
 
 ATCA_STATUS AtCryptoAuthLib::sign(const uint8_t to_sign[32], uint8_t signature[64])
@@ -330,12 +414,21 @@ ATCA_STATUS AtCryptoAuthLib::ecdh_gen_key(uint8_t key[64])
 
 ATCA_STATUS AtCryptoAuthLib::ecdh(const uint8_t other_key[64], uint8_t pmk[32], SlotCfg sl)
 {
-// Send the encrypted version of the ECDH command with the public key provided
-//if ((status = atcab_ecdh_enc(slotid, pubkey, pmk, encKey, enckeyid)) != ATCA_SUCCESS) BREAK(status, "ECDH Failed");
-// ^^^ use this version instead
+  // sends an encrypted command for slot ECDHE_PRIV only
+  switch (sl) {
+    case AUTH_PRIV:
+    case AUTH_PRIV_2:
+    case ECC_KEY_1:
+    case ECC_KEY_2:
+    case ECC_KEY_3:
+      return atcab_ecdh((uint8_t)sl, other_key, pmk);
+    case ECDHE_PRIV:
+      return atcab_ecdh_enc((uint8_t)sl, other_key, pmk, m_enc_key, ENC_PARENT);
+    default:
+      break;
+  }
 
-  return atcab_ecdh_enc((uint8_t)sl, other_key, pmk, m_enc_key, ENC_PARENT);
-//  return atcab_ecdh((uint8_t)sl, other_key, pmk);
+  return ATCA_BAD_PARAM;
 }
 
 //uint8_t AtCryptoAuthLib::m_enc_key[ATCA_KEY_SIZE] = {0};
@@ -434,7 +527,7 @@ ATCA_STATUS AtCryptoAuthLib::read_slot(SlotCfg slot, uint8_t *data, size_t offs,
   block = offs/32;
   i = offs % 32;
   dptr = 0;
-/*
+
   if (slot_encrypted(slot)) {
     ret = atcab_write_zone(ATCA_ZONE_DATA, ENC_PARENT, 0, 0, m_enc_key, ATCA_BLOCK_SIZE);
     if (ret != ATCA_SUCCESS) {
@@ -442,7 +535,7 @@ ATCA_STATUS AtCryptoAuthLib::read_slot(SlotCfg slot, uint8_t *data, size_t offs,
       return ret;;
     }
   }
-*/
+
   memset(data, 0, len);
   while (dptr < len) {
     if (slot_encrypted(slot)) {
@@ -589,15 +682,15 @@ const uint8_t AtCryptoAuthLib::golden_ecc_configdata[ATCA_CONFIG_SIZE] = {
   0x8F, 0x20, // slot 2 - TLS_SLOT_ECDHE_PRIV     (2)
   0xC4, 0x44, // slot 3 - TLS_SLOT_ECDH_PMK       (3)
   0x8F, 0x0F, // slot 4 - TLS_SLOT_ENC_PARENT     (4)
-  0x83, 0x64, // slot 7 - TLS_SLOT_FEATURE_PRIV   (5)
-  0x83, 0x64, // slot 7 - TLS_SLOT_FEATURE_PRIV   (6)
-  0x83, 0x64, // slot 7 - TLS_SLOT_FEATURE_PRIV   (7)
-  0xC4, 0x44, // slot 8 - TLS_SLOT8_ENC_STORE     (8) Size = 384
-  0xC4, 0x44, // slot 9 - TLS_SLOT9_ENC_STORE     (9) Size = 64
-  0x0F, 0x0F, // slot 10 - TLS_SLOT_AUTH_CERT     (A) Compressed certificate
+  0x87, 0x64, // slot 7 - TLS_SLOT_FEATURE_PRIV   (5)
+  0x87, 0x64, // slot 7 - TLS_SLOT_FEATURE_PRIV   (6)
+  0x87, 0x64, // slot 7 - TLS_SLOT_FEATURE_PRIV   (7)
+  0xC4, 0x44, // slot 8 - TLS_SLOT8_ENC_STORE     (8)
+  0xC4, 0x44, // slot 9 - TLS_SLOT9_ENC_STORE     (9)
+  0x0F, 0x0F, // slot 10 - TLS_SLOT_AUTH_CERT     (A)
   0x0F, 0x0F, // slot 11 - TLS_SLOT_SIGNER_PUBKEY (B)
-  0x0F, 0x0F, // slot 12 - TLS_SLOT_SIGNER_CERT   (C) Compressed certificate
-  0x0F, 0x0F, // slot 13 - TLS_SLOT_FEATURE_CERT  (D) Compressed certificate
+  0x0F, 0x0F, // slot 12 - TLS_SLOT_SIGNER_CERT   (C)
+  0x0F, 0x0F, // slot 13 - TLS_SLOT_FEATURE_CERT  (D)
   0x0F, 0x0F, // slot 14 - TLS_SLOT_PKICA_PUBKEY  (E)
   0x0F, 0x0F, // slot 15 - TLS_SLOT_DEVICE_CERT   (F)
   // Counters
@@ -636,15 +729,9 @@ const uint8_t AtCryptoAuthLib::golden_ecc_configdata[ATCA_CONFIG_SIZE] = {
   0x3C, 0x00, // slot 15 - TLS_SLOT_DEVICE_CERT   (F)
 };
 /* Config notes
-only slot 7 allows priv_write
-only slot 0 writes encrypted ECDH to slot+1
-
-TODO:
-  0 <- 2
-  1 <- 0
-  2 <- 1
-  3,5,6 <- 7
-
+slot 0,1,5,6,7 can do unencrypted ECDH
+slot 2 writes encrypted ECDH to slot+1
+slot 5,6,7 allows priv_write
 */
 
 ATCA_STATUS AtCryptoAuthLib::config_locked(bool &lockstate)
@@ -1128,8 +1215,6 @@ uint8_t AtCryptoAuthLib::aws_prov_get_signer_public_key(uint8_t* public_key)
   return ret;
 }
 
-uint8_t g_signer_pubkey[64];
-
 int AtCryptoAuthLib::build_signer_cert(uint8_t *signer_der,
   size_t *signer_der_size, uint8_t *signer_pem, size_t *signer_pem_size)
 {
@@ -1154,12 +1239,6 @@ int AtCryptoAuthLib::build_signer_cert(uint8_t *signer_der,
       break;
     }
 
-		ret = atcacert_get_subj_public_key(&my_signer_cert_def, signer_der, *signer_der_size, g_signer_pubkey);
-		if (ret != ATCACERT_E_SUCCESS) {
-      AWS_PRINTF("Failed: read signer public key %d\n", ret);
-      break;
-    }
-
 	} while(0);
 
 	return ret;
@@ -1172,6 +1251,8 @@ int AtCryptoAuthLib::build_device_cert(uint8_t *device_der,
   size_t *device_der_size, uint8_t *device_pem, size_t *device_pem_size)
 {
   uint8_t device_pubkey[64];
+  uint8_t signer_pubkey[64];
+
 	int ret = ATCA_SUCCESS;
 
 // read signer pub key
@@ -1183,7 +1264,13 @@ int AtCryptoAuthLib::build_device_cert(uint8_t *device_der,
       break;
     }
 
-		ret = atcatls_get_cert(&my_device_cert_def, g_signer_pubkey, device_der, device_der_size);
+    ret = aws_prov_get_signer_public_key(signer_pubkey);
+		if (ret != ATCACERT_E_SUCCESS) {
+      AWS_PRINTF("Failed: read signer certificate %d\n", ret);
+      break;
+    }
+
+		ret = atcatls_get_cert(&my_device_cert_def, signer_pubkey, device_der, device_der_size);
 		if (ret != ATCACERT_E_SUCCESS) {
       AWS_PRINTF("Failed: read device certificate %d\n", ret);
       break;

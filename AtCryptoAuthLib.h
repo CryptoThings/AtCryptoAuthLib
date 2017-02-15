@@ -79,6 +79,8 @@ class AtCryptoAuthLib
     ATCA_STATUS get_pub_key(SlotCfg slot, uint8_t pubKey[64]);
     ATCA_STATUS gen_key(SlotCfg slot, uint8_t pubKey[64]);
 
+    ATCA_STATUS priv_key_write(SlotCfg slot, const uint8_t priv_key[32]);
+
     ATCA_STATUS write_pub_key(SlotCfg slot, const uint8_t pubKey[64]);
 
     ATCA_STATUS sign(SlotCfg slot, const uint8_t to_sign[32], uint8_t signature[64]);
