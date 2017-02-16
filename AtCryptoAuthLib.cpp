@@ -527,7 +527,7 @@ ATCA_STATUS AtCryptoAuthLib::read_slot(SlotCfg slot, uint8_t *data, size_t offs,
   block = offs/32;
   i = offs % 32;
   dptr = 0;
-
+/*
   if (slot_encrypted(slot)) {
     ret = atcab_write_zone(ATCA_ZONE_DATA, ENC_PARENT, 0, 0, m_enc_key, ATCA_BLOCK_SIZE);
     if (ret != ATCA_SUCCESS) {
@@ -535,7 +535,7 @@ ATCA_STATUS AtCryptoAuthLib::read_slot(SlotCfg slot, uint8_t *data, size_t offs,
       return ret;;
     }
   }
-
+*/
   memset(data, 0, len);
   while (dptr < len) {
     if (slot_encrypted(slot)) {
@@ -573,7 +573,7 @@ ATCA_STATUS AtCryptoAuthLib::write_slot(SlotCfg slot, uint8_t *data, size_t offs
   dptr = 0;
 
   while (dptr < len) {
-    if ((i == 0) && ((len-dptr) > 32)) {
+    if ((i == 0) && ((len-dptr) >= 32)) {
       // write entire block
       memcpy(dataout, &(data[dptr]), 32);
       dptr += 32;
@@ -733,6 +733,70 @@ slot 0,1,5,6,7 can do unencrypted ECDH
 slot 2 writes encrypted ECDH to slot+1
 slot 5,6,7 allows priv_write
 */
+
+// minimal config without encrypted slots
+const uint8_t AtCryptoAuthLib::minimal_ecc_configdata[ATCA_CONFIG_SIZE] = {
+  // block 0
+  // Not Written: First 16 bytes are not written
+  0x01, 0x23, 0x00, 0x00, // SN
+  0x00, 0x00, 0x50, 0x00, // rev num
+  0x04, 0x05, 0x06, 0x07, // SN
+  0xEE, 0x00, 0x01, 0x00, // SN, I2C en
+  // I2C, reserved, OtpMode, ChipMode
+  0xC0, 0x00, 0x55, 0x00,
+  // SlotConfig
+  0x87, 0x20, // slot 0 - TLS_SLOT_AUTH_PRIV      (0)
+  0x87, 0x20, // slot 0 - TLS_SLOT_AUTH_PRIV      (1)
+  0x87, 0x20, // slot 2 - TLS_SLOT_ECDHE_PRIV     (2)
+  0x87, 0x20, // slot 3 - TLS_SLOT_ECDH_PMK       (3)
+  0x87, 0x20, // slot 4 - TLS_SLOT_ENC_PARENT     (4)
+  0x87, 0x20, // slot 7 - TLS_SLOT_FEATURE_PRIV   (5)
+  0x87, 0x20, // slot 7 - TLS_SLOT_FEATURE_PRIV   (6)
+  0x87, 0x20, // slot 7 - TLS_SLOT_FEATURE_PRIV   (7)
+  0x0F, 0x0F, // slot 8 - TLS_SLOT8_ENC_STORE     (8)
+  0x0F, 0x0F, // slot 9 - TLS_SLOT9_ENC_STORE     (9)
+  0x0F, 0x0F, // slot 10 - TLS_SLOT_AUTH_CERT     (A)
+  0x0F, 0x0F, // slot 11 - TLS_SLOT_SIGNER_PUBKEY (B)
+  0x0F, 0x0F, // slot 12 - TLS_SLOT_SIGNER_CERT   (C)
+  0x0F, 0x0F, // slot 13 - TLS_SLOT_FEATURE_CERT  (D)
+  0x0F, 0x0F, // slot 14 - TLS_SLOT_PKICA_PUBKEY  (E)
+  0x0F, 0x0F, // slot 15 - TLS_SLOT_DEVICE_CERT   (F)
+  // Counters
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0x00, 0x00, 0x00, 0x00,
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0x00, 0x00, 0x00, 0x00,
+  // Last Key Use
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF,
+  // Not Written: UserExtra, Selector, LockValue, LockConfig (word offset = 5)
+  0x00, 0x00, 0x00, 0x00,
+// -- end of common sha204 data -- (88 bytes)
+  // SlotLock[2], RFU[2]
+  0xFF, 0xFF, 0x00, 0x00,
+  // X.509 Format
+  0x00, 0x00, 0x00, 0x00,
+  // KeyConfig
+  0x13, 0x00, // slot 0 - TLS_SLOT_AUTH_PRIV      (0)
+  0x13, 0x00, // slot 0 - TLS_SLOT_AUTH_PRIV      (1)
+  0x13, 0x00, // slot 2 - TLS_SLOT_ECDHE_PRIV     (2)
+  0x13, 0x00, // slot 3 - TLS_SLOT_ECDH_PMK       (3)
+  0x13, 0x00, // slot 4 - TLS_SLOT_ENC_PARENT     (4)
+  0x13, 0x00, // slot 7 - TLS_SLOT_FEATURE_PRIV   (5)
+  0x13, 0x00, // slot 7 - TLS_SLOT_FEATURE_PRIV   (6)
+  0x13, 0x00, // slot 7 - TLS_SLOT_FEATURE_PRIV   (7)
+  0x3C, 0x00, // slot 8 - TLS_SLOT8_ENC_STORE     (8)
+  0x3C, 0x00, // slot 9 - TLS_SLOT9_ENC_STORE     (9)
+  0x3C, 0x00, // slot 10 - TLS_SLOT_AUTH_CERT     (A)
+  0x3C, 0x00, // slot 11 - TLS_SLOT_SIGNER_PUBKEY (B)
+  0x3C, 0x00, // slot 12 - TLS_SLOT_SIGNER_CERT   (C)
+  0x3C, 0x00, // slot 13 - TLS_SLOT_FEATURE_CERT  (D)
+  0x3C, 0x00, // slot 14 - TLS_SLOT_PKICA_PUBKEY  (E)
+  0x3C, 0x00, // slot 15 - TLS_SLOT_DEVICE_CERT   (F)
+};
+
 
 ATCA_STATUS AtCryptoAuthLib::config_locked(bool &lockstate)
 {

@@ -54,13 +54,21 @@ class AtCryptoAuthLib
       AUTH_CERT_DATA = 0xF
     } SlotCfg;
 /*
+    const uint32_t sc_sign        = (1 <<  0);
+    const uint32_t sc_ecdh        = (1 <<  1);
+    const uint32_t sc_ecdh_enc    = (1 <<  2);
+    const uint32_t sc_ecdh_pmk    = (1 <<  3);
+    const uint32_t sc_priv_write  = (1 <<  4);
+    const uint32_t sc_data        = (1 <<  5);
+    const uint32_t sc_enc_data    = (1 <<  6);
+    const uint32_t sc_pub_key     = (1 <<  7);
+    const uint32_t sc_gen_key     = (1 <<  8);
+
 #define AWS_ROOT_CERT_ID    (uint8_t)(0x00)  // Root Cert Identifier
 #define AWS_SIGNER_CERT_ID  (uint8_t)(0x01)  // Signer Cert Identifier
 #define AWS_VERIF_CERT_ID   (uint8_t)(0x02)  // Verification Cert Identifier
 #define AWS_DEVICE_CERT_ID  (uint8_t)(0x03)  // Device Cert Identifier
 */
-    // Slot 8 length
-    static const size_t enc_store_len = 256;
 
   public:
     AtCryptoAuthLib();
@@ -189,6 +197,7 @@ int build_device_cert(uint8_t *device_der, size_t *device_der_size,
     uint8_t m_enc_key[ATCA_KEY_SIZE];
 
     static const uint8_t golden_ecc_configdata[ATCA_CONFIG_SIZE];
+    static const uint8_t minimal_ecc_configdata[ATCA_CONFIG_SIZE];
 
     static const uint8_t ENC_KEY[ATCA_KEY_SIZE];
 
