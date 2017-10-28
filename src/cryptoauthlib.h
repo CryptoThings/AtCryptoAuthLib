@@ -42,6 +42,16 @@
 #ifndef _ATCA_LIB_H
 #define _ATCA_LIB_H
 
+#ifndef ATCAPRINTF
+#define ATCAPRINTF
+#endif
+#ifndef ATCA_HAL_I2C
+#define ATCA_HAL_I2C
+#endif
+#ifndef USE_ECCX08
+#define USE_ECCX08
+#endif
+
 #include <stddef.h>
 #include <string.h>
 

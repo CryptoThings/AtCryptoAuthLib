@@ -30,6 +30,20 @@
 #ifndef __ATCRYPTOAUTHLIB_H__
 #define __ATCRYPTOAUTHLIB_H__
 
+#ifndef ATCAPRINTF
+#define ATCAPRINTF
+#endif
+#ifndef ATCA_HAL_I2C
+#define ATCA_HAL_I2C
+#endif
+//__arm__
+#ifndef USE_WOLFSSL
+#define USE_WOLFSSL
+#endif
+#ifndef USE_EEPROM
+#define USE_EEPROM
+#endif
+
 // ATCA_STATUS
 
 class AtCryptoAuthLib
@@ -76,13 +90,16 @@ class AtCryptoAuthLib
 
     ATCA_STATUS init(const uint8_t* key = NULL);
 
-    ATCA_STATUS set_enc_key(const uint8_t* key = NULL);
+    ATCA_STATUS set_enc_key(const uint8_t* key);
 
     ATCA_STATUS config_locked(bool &lockstate);
     ATCA_STATUS check_config(bool &match);
     ATCA_STATUS config_chip(const uint8_t *access_key = NULL);
 
     ATCA_STATUS random(uint8_t rand_out[32]);
+
+    ATCA_STATUS revision(uint8_t _revision[4]);
+    ATCA_STATUS serial_number(uint8_t sn[9]);
 
     ATCA_STATUS get_pub_key(SlotCfg slot, uint8_t pubKey[64]);
     ATCA_STATUS gen_key(SlotCfg slot, uint8_t pubKey[64]);
@@ -181,10 +198,10 @@ class AtCryptoAuthLib
     uint8_t aws_prov_get_signer_public_key(uint8_t* public_key);
 
   public:
-int build_signer_cert(uint8_t *signer_der, size_t *signer_der_size,
-      uint8_t *signer_pem, size_t *signer_pem_size);
-int build_device_cert(uint8_t *device_der, size_t *device_der_size,
-      uint8_t *device_pem, size_t *device_pem_size);
+    int build_signer_cert(uint8_t *signer_der, size_t *signer_der_size,
+          uint8_t *signer_pem, size_t *signer_pem_size);
+    int build_device_cert(uint8_t *device_der, size_t *device_der_size,
+          uint8_t *device_pem, size_t *device_pem_size);
 
 
   private:
@@ -198,8 +215,6 @@ int build_device_cert(uint8_t *device_der, size_t *device_der_size,
 
     static const uint8_t golden_ecc_configdata[ATCA_CONFIG_SIZE];
     static const uint8_t minimal_ecc_configdata[ATCA_CONFIG_SIZE];
-
-    static const uint8_t ENC_KEY[ATCA_KEY_SIZE];
 
     ATCA_STATUS atca_tls_init_enc_key();
 

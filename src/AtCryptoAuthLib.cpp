@@ -98,7 +98,7 @@ ATCAIfaceCfg* gCfg = &cfg_ateccx08a_i2c_default;
 AtCryptoAuthLib::AtCryptoAuthLib()
     : sha256_init(false)
 {
-
+  memset(m_enc_key, 0, ATCA_KEY_SIZE);
 }
 
 AtCryptoAuthLib::~AtCryptoAuthLib()
@@ -114,22 +114,32 @@ ATCA_STATUS AtCryptoAuthLib::init(const uint8_t *access_key)
   if (ret != ATCA_SUCCESS)
     return ret;
 
-  if (access_key == NULL) {
-    set_enc_key(ENC_KEY);
-  } else {
-    set_enc_key(access_key);
-  }
-
   ret = config_locked(lockstate);
-  if ((ret != ATCA_SUCCESS) || !lockstate)
+  if (ret != ATCA_SUCCESS)
     return ret;
+  if (!lockstate)
+    return ATCA_SUCCESS;
 
-  return atca_tls_init_enc_key();
+  if (access_key != NULL) {
+    return set_enc_key(access_key);
+  } else {
+    return ATCA_SUCCESS;
+  }
 }
 
 ATCA_STATUS AtCryptoAuthLib::random(uint8_t rand_out[32])
 {
   return atcatls_random(rand_out);
+}
+
+ATCA_STATUS AtCryptoAuthLib::revision(uint8_t _revision[4])
+{
+  return atcab_info(_revision);
+}
+
+ATCA_STATUS AtCryptoAuthLib::serial_number(uint8_t sn[9])
+{
+  return atcab_read_serial_number(sn);
 }
 
 ATCA_STATUS AtCryptoAuthLib::get_pub_key(SlotCfg slot, uint8_t pubKey[64])
@@ -431,35 +441,15 @@ ATCA_STATUS AtCryptoAuthLib::ecdh(const uint8_t other_key[64], uint8_t pmk[32], 
   return ATCA_BAD_PARAM;
 }
 
-//uint8_t AtCryptoAuthLib::m_enc_key[ATCA_KEY_SIZE] = {0};
-
-const uint8_t AtCryptoAuthLib::ENC_KEY[ATCA_KEY_SIZE] = {
-  0xF9, 0x47, 0x2C, 0xBD, 0x33, 0x1D, 0x51, 0x00,
-  0x0C, 0x45, 0x36, 0x34, 0x81, 0x37, 0x2F, 0xD8,
-  0x5D, 0x5F, 0xB4, 0xB7, 0x25, 0x21, 0xF8, 0x90,
-  0x52, 0xFA, 0xFC, 0x41, 0x02, 0x40, 0xE6, 0xF5,
-};
-
 ATCA_STATUS AtCryptoAuthLib::set_enc_key(const uint8_t* key)
 {
   memcpy(m_enc_key, key, ATCA_KEY_SIZE);
-  return ATCA_SUCCESS;
+  return atca_tls_init_enc_key();
 }
 
 ATCA_STATUS AtCryptoAuthLib::atca_tls_init_enc_key()
 {
-  ATCA_STATUS ret = ATCA_SUCCESS;
-
-  do {
-//    ret = atcatls_set_enckey((uint8_t*)m_enc_key, ENC_PARENT, false);
-//    if (ret != ATCA_SUCCESS) { break; }
-
-    ret = atcatlsfn_set_get_enckey(atca_tls_set_enc_key, this);
-    if (ret != ATCA_SUCCESS) { break; }
-
-  } while(0);
-
-  return ret;
+  return atcatlsfn_set_get_enckey(atca_tls_set_enc_key, this);
 }
 
 ATCA_STATUS AtCryptoAuthLib::atca_tls_set_enc_key(uint8_t* outKey, int16_t keysize, void *ctx)
@@ -527,15 +517,7 @@ ATCA_STATUS AtCryptoAuthLib::read_slot(SlotCfg slot, uint8_t *data, size_t offs,
   block = offs/32;
   i = offs % 32;
   dptr = 0;
-/*
-  if (slot_encrypted(slot)) {
-    ret = atcab_write_zone(ATCA_ZONE_DATA, ENC_PARENT, 0, 0, m_enc_key, ATCA_BLOCK_SIZE);
-    if (ret != ATCA_SUCCESS) {
-      AWS_PRINTF("ERROR: atcatls_set_enckey %d\n", ret);
-      return ret;;
-    }
-  }
-*/
+
   memset(data, 0, len);
   while (dptr < len) {
     if (slot_encrypted(slot)) {
@@ -796,8 +778,86 @@ const uint8_t AtCryptoAuthLib::minimal_ecc_configdata[ATCA_CONFIG_SIZE] = {
   0x3C, 0x00, // slot 14 - TLS_SLOT_PKICA_PUBKEY  (E)
   0x3C, 0x00, // slot 15 - TLS_SLOT_DEVICE_CERT   (F)
 };
+/*
+sc_sign
+sc_ecdh
+sc_ecdh_enc
+sc_ecdh_pmk
+sc_priv_write
+sc_data
+sc_enc_data
+sc_pub_key
+sc_gen_key
+sc_enc_parent
+sc_enc_key[4]
+bool process_slot_config()
+{
+  uint8_t s[2];
+
+  if ((s[0] & 0xF0) == 8) 
+sc_sign
+  if (s[0] & 4) sc_ecdh = 1;
+sc_ecdh_enc
+
+  if (s[0] == 0x87) {
+    if (s[1] == 0x20) {
+      // no priv write
+    } else if ((s[i] & 0xF0) == 0x60) {
+      // priv write
+    }
+  }
+  if ((s[0] == 0x84) && (s[1] == 0x20)) {
+    // no ecdh
+  }
+  if ((s[0] == 0x8F) && (s[1] == 0x20)) {
+    // ecdh enc
+  }
+  if ((s[0] == 0x8F) && (s[1] == 0x0F)) {
+    // enc parent
+  }
+  if ((s[0] == 0xC4) && ((s[1] & 0xF0) == 0x40)) {
+    // ecdh pmk
+  }
 
 
+  0     1
+  0x87, 0x20, // slot 0 - TLS_SLOT_AUTH_PRIV      (0)
+  0x87, 0x20, // slot 0 - TLS_SLOT_AUTH_PRIV      (1)
+  0x8F, 0x20, // slot 2 - TLS_SLOT_ECDHE_PRIV     (2)
+  0xC4, 0x44, // slot 3 - TLS_SLOT_ECDH_PMK       (3)
+  0x8F, 0x0F, // slot 4 - TLS_SLOT_ENC_PARENT     (4)
+  0x87, 0x64, // slot 7 - TLS_SLOT_FEATURE_PRIV   (5)
+  0x87, 0x64, // slot 7 - TLS_SLOT_FEATURE_PRIV   (6)
+  0x87, 0x64, // slot 7 - TLS_SLOT_FEATURE_PRIV   (7)
+
+  0xC4, 0x44, // slot 8 - TLS_SLOT8_ENC_STORE     (8)
+  0xC4, 0x44, // slot 9 - TLS_SLOT9_ENC_STORE     (9)
+  0x0F, 0x0F, // slot 10 - TLS_SLOT_AUTH_CERT     (A)
+  0x0F, 0x0F, // slot 11 - TLS_SLOT_SIGNER_PUBKEY (B)
+  0x0F, 0x0F, // slot 12 - TLS_SLOT_SIGNER_CERT   (C)
+  0x0F, 0x0F, // slot 13 - TLS_SLOT_FEATURE_CERT  (D)
+  0x0F, 0x0F, // slot 14 - TLS_SLOT_PKICA_PUBKEY  (E)
+  0x0F, 0x0F, // slot 15 - TLS_SLOT_DEVICE_CERT   (F)
+
+// slot 0-7
+  switch (cfg[0]) {
+
+  }
+sc_sign
+sc_ecdh
+sc_ecdh_enc
+sc_ecdh_pmk
+sc_priv_write
+sc_data
+sc_enc_data
+sc_pub_key
+sc_gen_key
+sc_enc_parent
+sc_enc_key[4]
+
+
+}
+*/
 ATCA_STATUS AtCryptoAuthLib::config_locked(bool &lockstate)
 {
   ATCA_STATUS ret = ATCA_SUCCESS;

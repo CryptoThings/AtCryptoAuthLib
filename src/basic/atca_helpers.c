@@ -195,6 +195,16 @@ bool isHexAlpha(char c)
 }
 
 /**
+* \brief Returns true if this character is a valid hex character.
+* \param[in] c  character to check
+* \return True if the character can be included in a valid hexstring
+*/
+bool isHexDigit(char c)
+{
+	return isDigit(c) || isHexAlpha(c);
+}
+
+/**
 * \brief Returns true if this character is a valid hex character or if this is whitespace (The character can be
 *        included in a valid hexstring).
 * \param[in] c  character to check
@@ -203,16 +213,6 @@ bool isHexAlpha(char c)
 bool isHex(char c)
 {
 	return isHexDigit(c) || isWhiteSpace(c);
-}
-
-/**
-* \brief Returns true if this character is a valid hex character.
-* \param[in] c  character to check
-* \return True if the character can be included in a valid hexstring
-*/
-bool isHexDigit(char c)
-{
-	return isDigit(c) || isHexAlpha(c);
 }
 
 /**
